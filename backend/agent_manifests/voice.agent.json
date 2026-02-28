@@ -1,0 +1,26 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.3/schema.json",
+  "version": "v1.3",
+  "name": "BNB Voice Agent",
+  "description": "Voice call handler with real-time STT/TTS in Hindi and English via Azure Communication Services and AI Speech",
+  "instructions": "Handle voice calls for BNB Bank. Use Azure AI Speech for real-time Hindi/English speech-to-text and text-to-speech. Detect sentiment from voice tone. Support call recording with customer consent. Enable warm handoff to relationship managers (Vikram Mehta, Sunita Nair) when escalation is needed.",
+  "capabilities": [
+    { "name": "stt", "description": "Real-time speech-to-text in Hindi and English" },
+    { "name": "tts", "description": "Text-to-speech with natural Indian voices" },
+    { "name": "sentiment_analysis", "description": "Voice-based sentiment and frustration detection" },
+    { "name": "call_recording", "description": "Record calls with customer consent for compliance" },
+    { "name": "rm_handoff", "description": "Warm transfer to relationship managers" }
+  ],
+  "actions": [
+    {
+      "id": "handle_voice_call",
+      "type": "OpenApi",
+      "endpoints": [{ "url": "/api/voice", "method": "POST" }]
+    }
+  ],
+  "x-bnb-metadata": {
+    "agent_type": "channel",
+    "use_cases": ["UC2", "UC3"],
+    "bank": "Bharat National Bank"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.3/schema.json",
+  "version": "v1.3",
+  "name": "BNB Document Agent",
+  "description": "Extracts data from Aadhaar, PAN, and address proof documents using Azure AI Document Intelligence",
+  "instructions": "Process uploaded identity documents for BNB Bank onboarding. Use Azure AI Document Intelligence to perform OCR on Aadhaar cards, PAN cards, Voter ID, Passport, and utility bills. Extract structured fields (name, DOB, address, document number). Classify document type automatically.",
+  "capabilities": [
+    { "name": "ocr", "description": "Extract text from document images using Azure AI Document Intelligence" },
+    { "name": "data_extraction", "description": "Extract structured fields from Indian identity documents" },
+    { "name": "document_classification", "description": "Auto-classify document type (Aadhaar, PAN, etc.)" }
+  ],
+  "actions": [{ "id": "process_document", "type": "OpenApi", "endpoints": [{ "url": "/api/document-agent", "method": "POST" }] }],
+  "x-bnb-metadata": { "agent_type": "specialist", "use_cases": ["UC1"], "model": "gpt-4o", "temperature": 0.1 }
+}

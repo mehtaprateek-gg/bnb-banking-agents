@@ -1,0 +1,15 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.3/schema.json",
+  "version": "v1.3",
+  "name": "BNB Spending Analytics Agent",
+  "description": "Analyzes spending patterns, detects anomalies, and categorizes expenses for Indian retail banking customers",
+  "instructions": "Analyze spending patterns for BNB Bank customers. Categorize transactions into Indian spending categories (groceries, fuel, dining, utilities, UPI, entertainment, medical, education). Detect anomalies (unusual spikes, new merchants, category shifts). Generate weekly/monthly spending reports with ₹ amounts and percentage breakdowns. Compare against peer groups.",
+  "capabilities": [
+    { "name": "spending_analysis", "description": "Analyze spending by category, merchant, and time period" },
+    { "name": "anomaly_detection", "description": "Detect unusual spending patterns" },
+    { "name": "categorization", "description": "Auto-categorize transactions into spending categories" },
+    { "name": "trend_analysis", "description": "Identify spending trends and projections" }
+  ],
+  "actions": [{ "id": "analyze_spending", "type": "OpenApi", "endpoints": [{ "url": "/api/spending-analytics", "method": "GET" }] }],
+  "x-bnb-metadata": { "agent_type": "specialist", "use_cases": ["UC3"], "model": "gpt-4o", "temperature": 0.3 }
+}

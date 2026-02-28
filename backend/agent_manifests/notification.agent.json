@@ -1,0 +1,15 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.3/schema.json",
+  "version": "v1.3",
+  "name": "BNB Notification Agent",
+  "description": "Generates personalized notifications for WhatsApp, push, and voice channels",
+  "instructions": "Create personalized financial notifications for BNB Bank customers. Generate WhatsApp template messages (with HSM approval format), push notifications, and voice call scripts. Personalize with customer name, ₹ amounts, and actionable insights. Support Hindi, English, and Hinglish. Respect DND preferences and RBI communication guidelines.",
+  "capabilities": [
+    { "name": "whatsapp_notify", "description": "Generate WhatsApp template messages" },
+    { "name": "push_notify", "description": "Create push notification content" },
+    { "name": "voice_notify", "description": "Generate voice call scripts for IVR/TTS" },
+    { "name": "template_generate", "description": "Create reusable notification templates" }
+  ],
+  "actions": [{ "id": "send_notification", "type": "OpenApi", "endpoints": [{ "url": "/api/notification", "method": "POST" }] }],
+  "x-bnb-metadata": { "agent_type": "specialist", "use_cases": ["UC3"], "model": "gpt-4o", "temperature": 0.7 }
+}

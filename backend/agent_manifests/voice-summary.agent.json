@@ -1,0 +1,14 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.3/schema.json",
+  "version": "v1.3",
+  "name": "BNB Voice Summary Agent",
+  "description": "Delivers automated weekly financial summary via voice call using Azure AI Speech",
+  "instructions": "Generate and deliver weekly financial summaries for BNB Bank customers via automated voice calls. Create natural-sounding scripts with spending highlights, savings tips, and upcoming payments. Use Azure AI Speech for Hindi/English TTS with Indian voice profiles. Support interactive Q&A during the call (e.g., 'Press 1 for more details on dining expenses').",
+  "capabilities": [
+    { "name": "generate_summary", "description": "Create weekly financial summary script" },
+    { "name": "tts_delivery", "description": "Deliver script via Azure AI Speech TTS" },
+    { "name": "interactive_qa", "description": "Handle customer questions during voice summary" }
+  ],
+  "actions": [{ "id": "deliver_summary", "type": "OpenApi", "endpoints": [{ "url": "/api/voice-summary", "method": "POST" }] }],
+  "x-bnb-metadata": { "agent_type": "specialist", "use_cases": ["UC3"], "model": "gpt-4o", "temperature": 0.7 }
+}

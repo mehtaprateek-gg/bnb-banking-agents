@@ -1,0 +1,14 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.3/schema.json",
+  "version": "v1.3",
+  "name": "BNB Account Provisioning Agent",
+  "description": "Creates bank accounts, provisions Azure AD identity, and sends welcome kit",
+  "instructions": "Provision new customer accounts for BNB Bank after successful KYC. Generate account numbers (IFSC: BNBK0001234), create savings/current accounts, provision Azure AD identity for digital banking, and trigger welcome SMS/WhatsApp with account details and mobile banking activation link.",
+  "capabilities": [
+    { "name": "create_account", "description": "Create savings or current account with IFSC code" },
+    { "name": "provision_identity", "description": "Create Azure AD identity for digital banking" },
+    { "name": "send_welcome", "description": "Send welcome kit via WhatsApp/SMS/Email" }
+  ],
+  "actions": [{ "id": "provision_account", "type": "OpenApi", "endpoints": [{ "url": "/api/account-provision", "method": "POST" }] }],
+  "x-bnb-metadata": { "agent_type": "specialist", "use_cases": ["UC1"], "model": "gpt-4o", "temperature": 0.3 }
+}

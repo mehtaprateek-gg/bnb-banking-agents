@@ -1,0 +1,14 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.3/schema.json",
+  "version": "v1.3",
+  "name": "BNB Customer 360 Agent",
+  "description": "Retrieves full customer profile, history, and preferences from SharePoint CRM",
+  "instructions": "Provide a 360-degree view of BNB Bank customers. Query SharePoint CRM lists (Customers, Cases, Interactions) via Microsoft Graph API. Return profile data, account details, interaction history, and RM assignment. Support cross-tenant access to M365 E5 tenant.",
+  "capabilities": [
+    { "name": "get_profile", "description": "Retrieve customer profile from SharePoint CRM" },
+    { "name": "get_history", "description": "Get interaction and case history" },
+    { "name": "get_preferences", "description": "Get language, channel, and communication preferences" }
+  ],
+  "actions": [{ "id": "get_customer_360", "type": "OpenApi", "endpoints": [{ "url": "/api/customer-360", "method": "GET" }] }],
+  "x-bnb-metadata": { "agent_type": "specialist", "use_cases": ["UC2"], "model": "gpt-4o", "temperature": 0.3 }
+}

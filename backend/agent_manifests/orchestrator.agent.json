@@ -1,0 +1,33 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.3/schema.json",
+  "version": "v1.3",
+  "name": "BNB Orchestrator Agent",
+  "description": "Central orchestrator for Bharat National Bank — intent classification, language detection (Hindi/English), and agent routing via Azure OpenAI",
+  "instructions": "You are the central orchestrator for BNB Bank. Classify customer intent (onboarding, dispute, balance_check, card_block, loan_inquiry, financial_health), detect language (Hindi/English/Hinglish), assess sentiment, and route to the appropriate specialist agent pipeline. Always maintain conversation context across turns.",
+  "capabilities": [
+    { "name": "intent_classification", "description": "Classifies customer intent using Azure OpenAI GPT-4o" },
+    { "name": "agent_routing", "description": "Routes to appropriate specialist agents based on intent" },
+    { "name": "context_management", "description": "Maintains multi-turn conversation context per session" },
+    { "name": "language_detection", "description": "Detects Hindi, English, or Hinglish from user message" }
+  ],
+  "conversation_starters": [
+    { "text": "मुझे नया खाता खोलना है", "title": "Open New Account (Hindi)" },
+    { "text": "I want to dispute a transaction", "title": "Dispute Transaction" },
+    { "text": "Mera balance kya hai?", "title": "Check Balance (Hinglish)" }
+  ],
+  "actions": [
+    {
+      "id": "classify_and_route",
+      "type": "OpenApi",
+      "api_description": "Classify intent and route to specialist agents",
+      "endpoints": [{ "url": "/api/orchestrator", "method": "POST" }]
+    }
+  ],
+  "x-bnb-metadata": {
+    "agent_type": "router",
+    "use_cases": ["UC1", "UC2", "UC3"],
+    "model": "gpt-4o",
+    "temperature": 0.1,
+    "bank": "Bharat National Bank"
+  }
+}

@@ -1,4 +1,7 @@
-"""Orchestrator agent – classifies intent, detects language, and routes to specialists."""
+"""Orchestrator agent – classifies intent, detects language, and routes to specialists.
+
+Agent discovery is powered by Copilot Studio (Dataverse bots table).
+"""
 
 import json
 import os
@@ -10,6 +13,7 @@ from openai import AsyncAzureOpenAI
 
 from backend.shared.events.emitter import EventEmitter
 from backend.shared.models.banking import Channel, Language, Sentiment
+from backend.shared.registry.copilot_studio_client import get_registry
 
 AGENT_ID = "orchestrator"
 AGENT_NAME = "Orchestrator Agent"
@@ -22,24 +26,6 @@ SYSTEM_PROMPT = """You are the BNB Bank orchestrator. Given a customer message, 
   "summary": "<one-line summary of what the customer wants>"
 }
 Only output the JSON, nothing else."""
-
-# Intent → specialist agent mapping
-INTENT_AGENTS: dict[str, list[str]] = {
-    "onboarding": ["identity_verify", "kyc_aml", "document_agent", "account_provision"],
-    "dispute": ["customer_360", "transaction"],
-    "balance_check": ["customer_360", "transaction"],
-    "card_block": ["customer_360", "card_mgmt"],
-    "loan_inquiry": ["customer_360", "loan_advisor"],
-    "financial_health": [
-        "customer_360",
-        "transaction",
-        "spending_analytics",
-        "savings_advisor",
-        "notification",
-        "compliance_guard",
-        "voice_summary",
-    ],
-}
 
 _client: Optional[AsyncAzureOpenAI] = None
 
@@ -92,9 +78,11 @@ class OrchestratorAgent:
         # 3. Call Azure OpenAI for intent classification
         classification = await self._classify(message, customer_id)
 
-        # 4. Determine specialist agents to invoke
+        # 4. Discover specialist agents from Copilot Studio registry
         intent = classification.get("intent", "balance_check")
-        agents_to_call = INTENT_AGENTS.get(intent, ["customer_360"])
+        registry = get_registry()
+        cs_agents = registry.get_agents_for_intent(intent)
+        agents_to_call = [a.agent_id for a in cs_agents]
 
         self.emitter.emit(
             agent_id=AGENT_ID,

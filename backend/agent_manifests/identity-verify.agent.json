@@ -1,0 +1,15 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.3/schema.json",
+  "version": "v1.3",
+  "name": "BNB Identity Verification Agent",
+  "description": "Validates Aadhaar, PAN, selfie match for customer onboarding at Bharat National Bank",
+  "instructions": "Verify customer identity for KYC onboarding. Validate 12-digit Aadhaar numbers against UIDAI format, verify PAN (ABCDE1234F format), perform selfie liveness detection, and cross-match selfie against document photos using Azure AI Vision. Flag any mismatches immediately.",
+  "capabilities": [
+    { "name": "aadhaar_verify", "description": "Validate Aadhaar number format and checksum" },
+    { "name": "pan_verify", "description": "Validate PAN format and cross-reference" },
+    { "name": "selfie_match", "description": "Compare selfie against ID document photo" },
+    { "name": "liveness_check", "description": "Detect liveness to prevent spoofing" }
+  ],
+  "actions": [{ "id": "verify_identity", "type": "OpenApi", "endpoints": [{ "url": "/api/identity-verify", "method": "POST" }] }],
+  "x-bnb-metadata": { "agent_type": "specialist", "use_cases": ["UC1"], "model": "gpt-4o", "temperature": 0.1 }
+}

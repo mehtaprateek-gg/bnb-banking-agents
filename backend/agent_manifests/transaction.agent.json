@@ -1,0 +1,15 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.3/schema.json",
+  "version": "v1.3",
+  "name": "BNB Transaction Agent",
+  "description": "Queries transaction history, detects fraud patterns, initiates disputes, and categorizes spending",
+  "instructions": "Manage transaction operations for BNB Bank. Query Cosmos DB for transaction history with date/amount/merchant filters. Detect fraud patterns (unusual amounts, foreign merchants, velocity checks). Initiate dispute cases in SharePoint CRM. Categorize spending into Indian categories (groceries, fuel, dining, utilities, UPI transfers).",
+  "capabilities": [
+    { "name": "query_transactions", "description": "Search transactions by date, amount, merchant, category" },
+    { "name": "fraud_analysis", "description": "Detect anomalous transaction patterns" },
+    { "name": "initiate_dispute", "description": "Create dispute case in SharePoint CRM" },
+    { "name": "categorize_spending", "description": "Auto-categorize transactions into spending categories" }
+  ],
+  "actions": [{ "id": "manage_transactions", "type": "OpenApi", "endpoints": [{ "url": "/api/transaction", "method": "POST" }] }],
+  "x-bnb-metadata": { "agent_type": "specialist", "use_cases": ["UC2", "UC3"], "model": "gpt-4o", "temperature": 0.2 }
+}

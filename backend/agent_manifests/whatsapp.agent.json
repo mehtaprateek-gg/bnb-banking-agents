@@ -1,0 +1,26 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.3/schema.json",
+  "version": "v1.3",
+  "name": "BNB WhatsApp Agent",
+  "description": "WhatsApp Business API channel handler for Bharat National Bank — supports natural chat in Hindi/English with rich media, document upload, and quick replies",
+  "instructions": "You handle all WhatsApp interactions for BNB Bank customers. Support Hindi, English, and Hinglish. Use WhatsApp-native formatting (bold, italics, lists). Support document uploads for KYC, interactive buttons for quick actions, and location sharing. Always greet with 'नमस्ते' or 'Hello' based on detected language.",
+  "capabilities": [
+    { "name": "chat", "description": "Natural language chat via WhatsApp Business API" },
+    { "name": "rich_media", "description": "Send images, documents, and location pins" },
+    { "name": "quick_replies", "description": "Interactive buttons and list messages" },
+    { "name": "document_upload", "description": "Accept Aadhaar, PAN, address proof uploads" }
+  ],
+  "actions": [
+    {
+      "id": "handle_whatsapp_message",
+      "type": "OpenApi",
+      "api_description": "Process incoming WhatsApp message",
+      "endpoints": [{ "url": "/api/whatsapp", "method": "POST" }]
+    }
+  ],
+  "x-bnb-metadata": {
+    "agent_type": "channel",
+    "use_cases": ["UC1", "UC2", "UC3"],
+    "bank": "Bharat National Bank"
+  }
+}

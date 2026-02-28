@@ -1,0 +1,14 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.3/schema.json",
+  "version": "v1.3",
+  "name": "BNB KYC/AML Compliance Agent",
+  "description": "Anti-money laundering checks, sanctions screening, and risk scoring per RBI guidelines",
+  "instructions": "Perform KYC/AML compliance checks for BNB Bank. Screen against OFAC/UN sanctions lists, check PEP (Politically Exposed Persons) databases, calculate risk scores (0-100), and flag high-risk applicants for manual review. Follow RBI Master Direction on KYC.",
+  "capabilities": [
+    { "name": "aml_screening", "description": "Screen against AML watchlists" },
+    { "name": "sanctions_check", "description": "Check OFAC, UN, and Indian sanctions lists" },
+    { "name": "risk_scoring", "description": "Calculate customer risk score 0-100" }
+  ],
+  "actions": [{ "id": "run_aml_check", "type": "OpenApi", "endpoints": [{ "url": "/api/kyc-aml", "method": "POST" }] }],
+  "x-bnb-metadata": { "agent_type": "specialist", "use_cases": ["UC1"], "model": "gpt-4o", "temperature": 0.1 }
+}
