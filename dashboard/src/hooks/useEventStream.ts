@@ -17,7 +17,10 @@ interface UseEventStreamReturn {
   step: () => void;
   reset: () => void;
   totalEvents: number;
+  sendMessage: (message: string, customerId?: string) => Promise<void>;
 }
+
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 export function useEventStream(): UseEventStreamReturn {
   const [events, setEvents] = useState<AgentEvent[]>([]);
@@ -27,10 +30,11 @@ export function useEventStream(): UseEventStreamReturn {
   const [isPlaying, setIsPlaying] = useState(false);
   const indexRef = useRef(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const sseRef = useRef<EventSource | null>(null);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const scenarioEvents = useMemo(() => (demoScenarios as Record<string, { name: string; events: AgentEvent[] }>)[scenario]?.events || [], [scenario]);
-  const totalEvents = scenarioEvents.length;
+  const totalEvents = mode === 'replay' ? scenarioEvents.length : events.length;
 
   const stopTimer = useCallback(() => {
     if (timerRef.current) {
@@ -39,6 +43,60 @@ export function useEventStream(): UseEventStreamReturn {
     }
   }, []);
 
+  // --- SSE for live mode ---
+  useEffect(() => {
+    if (mode === 'live') {
+      const sse = new EventSource(`${API_BASE}/api/events/stream`);
+      sseRef.current = sse;
+      sse.onmessage = (evt) => {
+        try {
+          const raw = JSON.parse(evt.data);
+          const mapped: AgentEvent = {
+            eventId: raw.event_id,
+            timestamp: raw.timestamp,
+            sessionId: raw.session_id,
+            useCase: raw.use_case || 'demo',
+            agentId: raw.agent_id,
+            agentName: raw.agent_name,
+            eventType: raw.event_type || 'action',
+            action: raw.action,
+            inputData: raw.input_data || {},
+            outputData: raw.output_data || {},
+            reasoning: raw.reasoning || '',
+            tokensUsed: raw.tokens_used || 0,
+            latencyMs: raw.latency_ms || 0,
+            confidence: raw.confidence || 0,
+            channel: raw.channel || 'mobile',
+            customerId: raw.customer_id || '',
+            nextAgents: raw.next_agents || [],
+            metadata: {
+              language: raw.language || 'en',
+              sentiment: raw.sentiment || 'neutral',
+            },
+          };
+          setEvents((prev) => [...prev, mapped]);
+        } catch { /* ignore parse errors */ }
+      };
+      return () => { sse.close(); sseRef.current = null; };
+    } else {
+      if (sseRef.current) { sseRef.current.close(); sseRef.current = null; }
+    }
+  }, [mode]);
+
+  // --- Send message to backend (live mode) ---
+  const sendMessage = useCallback(async (message: string, customerId?: string) => {
+    await fetch(`${API_BASE}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message,
+        customer_id: customerId || 'CUST-002-PRIYA',
+        channel: 'whatsapp',
+      }),
+    });
+  }, []);
+
+  // --- Replay mode logic (unchanged) ---
   const step = useCallback(() => {
     if (indexRef.current < scenarioEvents.length) {
       const nextEvent = scenarioEvents[indexRef.current];
@@ -52,7 +110,6 @@ export function useEventStream(): UseEventStreamReturn {
 
   const play = useCallback(() => {
     if (indexRef.current >= scenarioEvents.length) {
-      // Reset and replay
       indexRef.current = 0;
       setEvents([]);
     }
@@ -83,14 +140,10 @@ export function useEventStream(): UseEventStreamReturn {
     setEvents([]);
   }, [stopTimer]);
 
-  // Reset when scenario changes
-  useEffect(() => {
-    reset();
-  }, [scenario, reset]);
+  useEffect(() => { reset(); }, [scenario, reset]);
 
-  // Restart timer when speed changes during playback
   useEffect(() => {
-    if (isPlaying) {
+    if (isPlaying && mode === 'replay') {
       stopTimer();
       const delay = 1500 / speed;
       timerRef.current = setInterval(() => {
@@ -105,9 +158,9 @@ export function useEventStream(): UseEventStreamReturn {
       }, delay);
     }
     return () => stopTimer();
-  }, [speed, isPlaying, scenarioEvents, stopTimer]);
+  }, [speed, isPlaying, mode, scenarioEvents, stopTimer]);
 
-  // Compute health from events
+  // Compute health
   const lastEvent = events[events.length - 1];
   const uniqueAgents = new Set(events.map((e) => e.agentId));
   const health: SystemHealth = {
@@ -123,5 +176,6 @@ export function useEventStream(): UseEventStreamReturn {
   return {
     events, health, mode, setMode, scenario, setScenario,
     speed, setSpeed, isPlaying, play, pause, step, reset, totalEvents,
+    sendMessage,
   };
 }

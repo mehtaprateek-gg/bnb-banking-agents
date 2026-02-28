@@ -10,6 +10,7 @@ import uuid
 from typing import Optional
 
 from openai import AsyncAzureOpenAI
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 
 from backend.shared.events.emitter import EventEmitter
 from backend.shared.models.banking import Channel, Language, Sentiment
@@ -28,6 +29,9 @@ SYSTEM_PROMPT = """You are the BNB Bank orchestrator. Given a customer message, 
 Only output the JSON, nothing else."""
 
 _client: Optional[AsyncAzureOpenAI] = None
+_token_provider = get_bearer_token_provider(
+    DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
+)
 
 
 def _get_client() -> AsyncAzureOpenAI:
@@ -35,8 +39,8 @@ def _get_client() -> AsyncAzureOpenAI:
     if _client is None:
         _client = AsyncAzureOpenAI(
             azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT", "https://bnb-openai.openai.azure.com/"),
-            api_version="2024-08-06",
-            api_key=os.getenv("AZURE_OPENAI_KEY", ""),
+            api_version="2024-02-01",
+            azure_ad_token_provider=_token_provider,
         )
     return _client
 
@@ -131,7 +135,11 @@ class OrchestratorAgent:
                 temperature=0.1,
                 max_tokens=256,
             )
-            raw = resp.choices[0].message.content or "{}"
+            raw = (resp.choices[0].message.content or "{}").strip()
+            # Strip markdown code fences if present
+            if raw.startswith("```"):
+                raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
+                raw = raw.rsplit("```", 1)[0].strip()
             tokens = resp.usage.total_tokens if resp.usage else 0
             latency = (time.time() - start) * 1000
 
