@@ -180,7 +180,11 @@ def create_demo_customer(name: str, phone: str) -> tuple[Customer, Account]:
     """
     phone = phone.strip().replace(" ", "")
     if not phone.startswith("+"):
-        phone = "+91" + phone.lstrip("0")
+        # If already has country code 91, just add +
+        if phone.startswith("91") and len(phone) > 10:
+            phone = "+" + phone
+        else:
+            phone = "+91" + phone.lstrip("0")
 
     # Check for duplicate phone number
     for c in get_all_customers():
