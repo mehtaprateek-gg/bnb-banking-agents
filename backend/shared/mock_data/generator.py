@@ -235,6 +235,18 @@ _dynamic_customers: list[Customer] = []
 _dynamic_accounts: list[Account] = []
 
 
+def delete_dynamic_customer(customer_id: str) -> bool:
+    """Remove a dynamically added customer. Returns True if found and deleted."""
+    global _dynamic_customers, _dynamic_accounts
+    for i, c in enumerate(_dynamic_customers):
+        if c.customer_id == customer_id:
+            _dynamic_customers.pop(i)
+            # Also remove the matching account
+            _dynamic_accounts = [a for a in _dynamic_accounts if a.customer_id != customer_id]
+            return True
+    return False
+
+
 def get_all_customers() -> list[Customer]:
     """Return fixed personas + any dynamically added demo customers."""
     return generate_customers() + _dynamic_customers

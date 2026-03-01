@@ -22,6 +22,7 @@ const CustomerList: React.FC<CustomerListProps> = ({ onRefreshRequest }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const fetchCustomers = useCallback(async () => {
     setLoading(true);
@@ -36,6 +37,28 @@ const CustomerList: React.FC<CustomerListProps> = ({ onRefreshRequest }) => {
       setLoading(false);
     }
   }, []);
+
+  const deleteCustomer = async (customerId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm('Delete this customer?')) return;
+    setDeleting(customerId);
+    try {
+      const resp = await fetch(`${API_BASE}/api/cosmos/customers/${customerId}`, { method: 'DELETE' });
+      if (resp.ok) {
+        setCustomers(prev => prev.filter(c => c.customer_id !== customerId));
+        setExpanded(null);
+      } else {
+        const data = await resp.json();
+        alert(data.error || 'Delete failed');
+      }
+    } catch {
+      alert('Delete failed');
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const isFixedPersona = (id: string) => id.startsWith('CUST-00');
 
   useEffect(() => { fetchCustomers(); }, [fetchCustomers, onRefreshRequest]);
 
@@ -137,6 +160,19 @@ const CustomerList: React.FC<CustomerListProps> = ({ onRefreshRequest }) => {
                   <div><strong style={{ color: '#64748b' }}>PAN:</strong> {c.pan_masked}</div>
                   <div><strong style={{ color: '#64748b' }}>Segment:</strong> {c.segment}</div>
                   <div><strong style={{ color: '#64748b' }}>RM:</strong> {c.rm_name}</div>
+                  {!isFixedPersona(c.customer_id) && (
+                    <button
+                      onClick={(e) => deleteCustomer(c.customer_id, e)}
+                      disabled={deleting === c.customer_id}
+                      style={{
+                        marginTop: 8, padding: '4px 12px', fontSize: 11,
+                        background: '#dc262620', color: '#f87171', border: '1px solid #f8717140',
+                        borderRadius: 4, cursor: 'pointer', fontWeight: 500,
+                      }}
+                    >
+                      {deleting === c.customer_id ? 'Deleting...' : '🗑️ Delete Customer'}
+                    </button>
+                  )}
                 </div>
               )}
             </div>

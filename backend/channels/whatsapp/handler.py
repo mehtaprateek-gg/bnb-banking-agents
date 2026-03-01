@@ -66,6 +66,13 @@ def register_phone(phone: str, customer_id: str) -> None:
     _PHONE_TO_CUSTOMER[phone] = customer_id
 
 
+def unregister_phone(customer_id: str) -> None:
+    """Remove phone → customer_id mapping for a deleted customer."""
+    to_remove = [p for p, cid in _PHONE_TO_CUSTOMER.items() if cid == customer_id]
+    for p in to_remove:
+        del _PHONE_TO_CUSTOMER[p]
+
+
 async def send_whatsapp_message(to_phone: str, message: str) -> dict:
     """Send a text message to a WhatsApp user via ACS.
 

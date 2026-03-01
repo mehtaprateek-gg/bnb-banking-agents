@@ -213,6 +213,23 @@ async def add_customer(req: AddCustomerRequest):
     }
 
 
+@app.delete("/api/cosmos/customers/{customer_id}")
+async def delete_customer(customer_id: str):
+    """Delete a dynamically added customer. Fixed personas cannot be deleted."""
+    from backend.shared.mock_data.generator import delete_dynamic_customer
+    from backend.channels.whatsapp.handler import unregister_phone
+
+    if customer_id.startswith("CUST-00"):
+        return JSONResponse(status_code=400, content={"error": "Cannot delete fixed demo personas"})
+
+    deleted = delete_dynamic_customer(customer_id)
+    if not deleted:
+        return JSONResponse(status_code=404, content={"error": f"Customer {customer_id} not found"})
+
+    unregister_phone(customer_id)
+    return {"status": "deleted", "customer_id": customer_id}
+
+
 @app.get("/api/cosmos/transactions/{customer_id}")
 async def list_transactions(customer_id: str, limit: int = 10):
     """Retrieve transactions for a customer (from mock data generator)."""
