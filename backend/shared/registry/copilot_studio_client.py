@@ -48,6 +48,7 @@ class CopilotStudioClient:
         ).rstrip("/")
         self._credential = DefaultAzureCredential()
         self._cache: dict[str, AgentRegistryEntry] = {}
+        self._source: str = "not_loaded"
 
     def _get_token(self) -> str:
         """Acquire an access token scoped to the Dataverse environment."""
@@ -68,7 +69,21 @@ class CopilotStudioClient:
     # ------------------------------------------------------------------
 
     async def refresh_cache(self) -> None:
-        """Fetch all BNB bots from Dataverse and populate the local cache."""
+        """Fetch all BNB bots from Dataverse and populate the local cache.
+
+        Falls back to local agent manifest files when Dataverse is unreachable
+        (e.g. VM managed identity without Dataverse permissions).
+        """
+        try:
+            await self._refresh_from_dataverse()
+            self._source = "copilot_studio"
+        except Exception as exc:
+            logger.warning("Dataverse unreachable (%s), loading from local manifests", exc)
+            self._load_from_manifests()
+            self._source = "copilot_studio_manifests"
+
+    async def _refresh_from_dataverse(self) -> None:
+        """Fetch agents from Dataverse bots table."""
         url = (
             f"{self.dataverse_url}/api/data/v9.2/bots"
             "?$filter=startswith(schemaname,'BNB_')"
@@ -86,6 +101,52 @@ class CopilotStudioClient:
                 self._cache[entry.agent_id] = entry
 
         logger.info("Copilot Studio cache refreshed: %d agents loaded", len(self._cache))
+
+    def _load_from_manifests(self) -> None:
+        """Load agents from local declarative agent manifest JSON files."""
+        import pathlib
+
+        manifests_dir = pathlib.Path(__file__).resolve().parents[2] / "agent_manifests"
+        if not manifests_dir.exists():
+            logger.error("No agent_manifests directory at %s", manifests_dir)
+            return
+
+        self._cache.clear()
+        # Build reverse lookup: display_name fragments → agent_id
+        name_to_id = {v.replace("-", "").replace("_", ""): v for v in _SCHEMA_TO_AGENT_ID.values()}
+
+        for f in sorted(manifests_dir.glob("*.agent.json")):
+            try:
+                manifest = json.loads(f.read_text(encoding="utf-8"))
+                agent_id = f.stem.replace(".agent", "")
+                meta = manifest.get("x-bnb-metadata", {})
+                agent_type_str = meta.get("agent_type", "specialist")
+                try:
+                    agent_type = AgentType(agent_type_str)
+                except ValueError:
+                    agent_type = AgentType.SPECIALIST
+
+                caps = [c.get("name", "") for c in manifest.get("capabilities", [])]
+
+                entry = AgentRegistryEntry(
+                    agent_id=agent_id,
+                    display_name=manifest.get("name", agent_id),
+                    description=manifest.get("description", ""),
+                    agent_type=agent_type,
+                    use_cases=meta.get("use_cases", []),
+                    endpoint=f"/api/{agent_id}",
+                    capabilities=caps,
+                    llm_model=meta.get("model", "gpt-4o"),
+                    temperature=meta.get("temperature", 0.3),
+                    max_tokens=4096,
+                    status="active",
+                    version="manifest-1.0",
+                )
+                self._cache[agent_id] = entry
+            except Exception as exc:
+                logger.warning("Failed to load manifest %s: %s", f.name, exc)
+
+        logger.info("Loaded %d agents from local manifests", len(self._cache))
 
     def _bot_to_entry(self, bot: dict) -> Optional[AgentRegistryEntry]:
         """Convert a Dataverse bot record into an AgentRegistryEntry."""

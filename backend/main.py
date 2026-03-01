@@ -103,7 +103,7 @@ async def health():
     return {
         "status": "healthy",
         "agents_registered": len(agents),
-        "registry_source": "copilot_studio",
+        "registry_source": registry._source,
         "dataverse_url": os.getenv("DATAVERSE_URL", "not configured"),
     }
 
@@ -193,3 +193,84 @@ async def list_transactions(customer_id: str, limit: int = 10):
     from backend.shared.mock_data.generator import generate_transactions
     txns = generate_transactions(customer_id, days=30, count=25)
     return [t.model_dump(mode="json") for t in txns[:limit]]
+
+
+# ---------------------------------------------------------------------------
+# WhatsApp Channel (Azure Communication Services Advanced Messaging)
+# ---------------------------------------------------------------------------
+@app.post("/api/whatsapp/webhook")
+async def whatsapp_webhook(request: Request):
+    """Event Grid webhook — receives inbound WhatsApp messages and delivery status.
+
+    Handles:
+    - Event Grid validation handshake (SubscriptionValidation)
+    - Inbound messages → Orchestrator → reply via ACS
+    - Delivery status updates
+    """
+    from backend.channels.whatsapp.handler import (
+        parse_event_grid_event, lookup_customer, send_whatsapp_message,
+    )
+
+    body = await request.json()
+    events = body if isinstance(body, list) else [body]
+
+    for event in events:
+        # Event Grid validation handshake
+        if event.get("eventType") == "Microsoft.EventGrid.SubscriptionValidationEvent":
+            code = event.get("data", {}).get("validationCode", "")
+            return {"validationResponse": code}
+
+        parsed = parse_event_grid_event(event)
+        if not parsed:
+            continue
+
+        if parsed["type"] == "status":
+            # Log delivery status (delivered, read, failed)
+            continue
+
+        # Inbound WhatsApp message → Orchestrator
+        from_phone = parsed["from_phone"]
+        message = parsed["message"]
+        customer_id = lookup_customer(from_phone)
+
+        session_id = f"wa-{uuid.uuid4().hex[:8]}"
+        emitter = SSEEventEmitter(session_id=session_id, use_case="UC2", channel=Channel.WHATSAPP)
+        orchestrator = OrchestratorAgent(emitter)
+
+        result = await orchestrator.handle_message(
+            message=message,
+            customer_id=customer_id,
+            channel=Channel.WHATSAPP,
+            session_id=session_id,
+        )
+
+        # Reply on WhatsApp
+        intent = result.get("intent", "unknown")
+        summary = result.get("summary", message)
+        reply = (
+            f"🏦 BNB Bank\n\n"
+            f"Namaste! We received your message.\n"
+            f"Request type: {intent.replace('_', ' ').title()}\n\n"
+            f"{summary}\n\n"
+            f"Our team is processing your request. "
+            f"You'll receive an update shortly.\n\n"
+            f"Ref: {session_id}"
+        )
+        await send_whatsapp_message(from_phone, reply)
+
+    return {"status": "ok"}
+
+
+@app.post("/api/whatsapp/send")
+async def whatsapp_send(request: Request):
+    """Send a WhatsApp message to a customer (for testing / agent-initiated messages)."""
+    from backend.channels.whatsapp.handler import send_whatsapp_message
+
+    body = await request.json()
+    to_phone = body.get("to", "")
+    message = body.get("message", "")
+    if not to_phone or not message:
+        return {"error": "Missing 'to' and 'message' fields"}, 400
+
+    result = await send_whatsapp_message(to_phone, message)
+    return result
