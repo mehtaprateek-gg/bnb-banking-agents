@@ -171,10 +171,74 @@ def generate_transactions(customer_id: str, days: int = 30, count: int = 25) -> 
     return transactions
 
 
+def create_demo_customer(name: str, phone: str) -> tuple[Customer, Account]:
+    """Create a new demo customer with auto-generated mock data.
+
+    Only name and phone are real; everything else is simulated.
+    Returns (customer, account) tuple.
+    """
+    phone = phone.strip().replace(" ", "")
+    if not phone.startswith("+"):
+        phone = "+91" + phone.lstrip("0")
+
+    # Generate a sequential customer ID
+    seq = len(_dynamic_customers) + 4  # 1-3 are fixed personas
+    slug = name.upper().split()[0][:8] if name else "DEMO"
+    customer_id = f"CUST-{seq:03d}-{slug}"
+
+    first_name = name.split()[0] if name else "Demo"
+    last_name = name.split()[-1] if len(name.split()) > 1 else "User"
+    email = f"{first_name.lower()}.{last_name.lower()}@demo.com"
+
+    customer = Customer(
+        customer_id=customer_id,
+        name=name,
+        phone=phone,
+        email=email,
+        aadhaar_masked=generate_aadhaar_masked(),
+        pan_masked=generate_pan_masked(),
+        account_number=generate_account_number(),
+        account_type="savings",
+        segment="retail",
+        rm_name=random.choice(["Vikram Mehta", "Sunita Nair"]),
+        language_preference=Language.HINGLISH,
+    )
+
+    account = Account(
+        account_id=f"ACC-{uuid.uuid4().hex[:8].upper()}",
+        customer_id=customer_id,
+        account_number=customer.account_number or generate_account_number(),
+        account_type="savings",
+        balance=round(random.uniform(25000, 300000), 2),
+        ifsc_code=random.choice(IFSC_CODES),
+        branch=random.choice(BRANCHES),
+    )
+
+    _dynamic_customers.append(customer)
+    _dynamic_accounts.append(account)
+
+    return customer, account
+
+
+# In-memory store for dynamically added demo customers
+_dynamic_customers: list[Customer] = []
+_dynamic_accounts: list[Account] = []
+
+
+def get_all_customers() -> list[Customer]:
+    """Return fixed personas + any dynamically added demo customers."""
+    return generate_customers() + _dynamic_customers
+
+
+def get_all_accounts() -> list[Account]:
+    """Return accounts for all customers (fixed + dynamic)."""
+    return generate_accounts(generate_customers()) + _dynamic_accounts
+
+
 def generate_all_mock_data() -> dict:
-    """Generate complete mock banking dataset."""
-    customers = generate_customers()
-    accounts = generate_accounts(customers)
+    """Generate complete mock banking dataset (includes dynamic customers)."""
+    customers = get_all_customers()
+    accounts = get_all_accounts()
     all_transactions = {}
     for customer in customers:
         all_transactions[customer.customer_id] = generate_transactions(customer.customer_id)

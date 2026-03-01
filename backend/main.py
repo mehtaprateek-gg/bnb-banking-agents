@@ -76,6 +76,11 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Request / Response models
 # ---------------------------------------------------------------------------
+class AddCustomerRequest(BaseModel):
+    name: str
+    phone: str
+
+
 class ChatRequest(BaseModel):
     message: str
     customer_id: str = "CUST-002-PRIYA"
@@ -181,10 +186,27 @@ async def event_stream(request: Request):
 
 @app.get("/api/cosmos/customers")
 async def list_customers():
-    """Retrieve customers (from mock data generator — Cosmos DB is seeded identically)."""
-    from backend.shared.mock_data.generator import generate_customers
-    customers = generate_customers()
+    """Retrieve customers (fixed personas + dynamically added demo customers)."""
+    from backend.shared.mock_data.generator import get_all_customers
+    customers = get_all_customers()
     return [c.model_dump(mode="json") for c in customers]
+
+
+@app.post("/api/customers")
+async def add_customer(req: AddCustomerRequest):
+    """Register a demo customer with a real phone number. All other data is auto-generated."""
+    from backend.shared.mock_data.generator import create_demo_customer
+    from backend.channels.whatsapp.handler import register_phone
+
+    customer, account = create_demo_customer(name=req.name, phone=req.phone)
+    # Update the WhatsApp phone → customer_id lookup map
+    register_phone(customer.phone, customer.customer_id)
+
+    return {
+        "status": "created",
+        "customer": customer.model_dump(mode="json"),
+        "account": account.model_dump(mode="json"),
+    }
 
 
 @app.get("/api/cosmos/transactions/{customer_id}")

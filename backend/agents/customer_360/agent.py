@@ -3,13 +3,11 @@
 from typing import Optional
 
 from backend.shared.events.emitter import EventEmitter
-from backend.shared.mock_data.generator import generate_all_mock_data
+from backend.shared.mock_data.generator import get_all_customers, get_all_accounts
 from backend.shared.models.banking import Customer
 
 AGENT_ID = "customer_360"
 AGENT_NAME = "Customer 360 Agent"
-
-_mock = generate_all_mock_data()
 
 
 class Customer360Agent:
@@ -75,13 +73,13 @@ class Customer360Agent:
 
     # ------------------------------------------------------------------
     def _find_customer(self, customer_id: str) -> Optional[Customer]:
-        for c in _mock["customers"]:
+        for c in get_all_customers():
             if c.customer_id == customer_id:
                 return c
         return None
 
     def _find_account(self, customer_id: str):
-        for a in _mock["accounts"]:
+        for a in get_all_accounts():
             if a.customer_id == customer_id:
                 return a
         return None

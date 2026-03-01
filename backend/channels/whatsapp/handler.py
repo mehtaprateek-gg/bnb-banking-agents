@@ -52,6 +52,14 @@ def lookup_customer(phone: str) -> str:
     return _PHONE_TO_CUSTOMER.get(phone, f"UNKNOWN-{phone}")
 
 
+def register_phone(phone: str, customer_id: str) -> None:
+    """Register a phone number → customer_id mapping (for demo customers)."""
+    phone = phone.strip().replace(" ", "")
+    if not phone.startswith("+"):
+        phone = "+91" + phone.lstrip("0")
+    _PHONE_TO_CUSTOMER[phone] = customer_id
+
+
 async def send_whatsapp_message(to_phone: str, message: str) -> dict:
     """Send a text message to a WhatsApp user via ACS.
 

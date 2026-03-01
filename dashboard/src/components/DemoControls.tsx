@@ -1,5 +1,6 @@
 import React from 'react';
 import { DemoMode } from '../types';
+import AddCustomerForm from './AddCustomerForm';
 
 interface Props {
   mode: DemoMode;
@@ -91,8 +92,13 @@ const DemoControls: React.FC<Props> = ({
       </div>
 
       {/* Progress */}
-      <div style={{ marginLeft: 'auto', fontSize: 12, color: '#64748b' }}>
+      <div style={{ fontSize: 12, color: '#64748b' }}>
         Event {eventCount}/{totalEvents}
+      </div>
+
+      {/* Add Customer */}
+      <div style={{ marginLeft: 'auto' }}>
+        <AddCustomerForm />
       </div>
     </div>
   );
