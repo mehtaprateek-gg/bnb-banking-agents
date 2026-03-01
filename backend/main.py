@@ -230,11 +230,17 @@ async def whatsapp_webhook(request: Request):
 
     Handles:
     - Event Grid validation handshake (SubscriptionValidation)
-    - Inbound messages → Orchestrator → reply via ACS
+    - Multi-turn onboarding flow (SBI YONO style)
+    - Single-turn intent routing for other messages
     - Delivery status updates
     """
     from backend.channels.whatsapp.handler import (
         parse_event_grid_event, lookup_customer, send_whatsapp_message,
+        register_phone,
+    )
+    from backend.channels.whatsapp.conversation import (
+        is_onboarding_trigger, has_active_session, start_session,
+        get_session, end_session, handle_step,
     )
 
     body = await request.json()
@@ -251,14 +257,62 @@ async def whatsapp_webhook(request: Request):
             continue
 
         if parsed["type"] == "status":
-            # Log delivery status (delivered, read, failed)
             continue
 
-        # Inbound WhatsApp message → Orchestrator
         from_phone = parsed["from_phone"]
         message = parsed["message"]
-        customer_id = lookup_customer(from_phone)
 
+        # --- Emit inbound chat event for dashboard ---
+        _emit_chat_event(from_phone, message, direction="inbound")
+
+        # --- Multi-turn onboarding flow ---
+        if is_onboarding_trigger(message) and not has_active_session(from_phone):
+            session = start_session(from_phone)
+            session_id = f"wa-onboard-{uuid.uuid4().hex[:8]}"
+            emitter = SSEEventEmitter(session_id=session_id, use_case="UC1", channel=Channel.WHATSAPP)
+
+            emitter.emit(
+                agent_id="orchestrator", agent_name="Orchestrator Agent",
+                action="onboarding_initiated",
+                input_data={"message": message, "phone": from_phone},
+                output_data={"intent": "onboarding", "flow": "sbi_yono_style"},
+                reasoning="Detected account opening request — starting multi-turn onboarding",
+                customer_id=f"NEW-{from_phone}",
+            )
+
+            reply = (
+                "🏦 *Welcome to Bharat National Bank!*\n\n"
+                "Let's open your Digital Savings Account — "
+                "fully paperless, just like SBI YONO.\n\n"
+                "Please share your *full name* as per Aadhaar."
+            )
+            _emit_chat_event(from_phone, reply, direction="outbound")
+            await send_whatsapp_message(from_phone, reply)
+            continue
+
+        if has_active_session(from_phone):
+            session = get_session(from_phone)
+            if not session:
+                continue
+
+            session_id = f"wa-onboard-{uuid.uuid4().hex[:8]}"
+            emitter = SSEEventEmitter(session_id=session_id, use_case="UC1", channel=Channel.WHATSAPP)
+
+            # Run agents at specific steps
+            await _run_onboarding_agents(session, emitter, from_phone)
+
+            reply, is_complete = handle_step(session, message)
+            _emit_chat_event(from_phone, reply, direction="outbound")
+            await send_whatsapp_message(from_phone, reply)
+
+            if is_complete and session.step == "complete":
+                # Auto-register customer
+                await _finalize_onboarding(session, emitter, from_phone)
+                end_session(from_phone)
+            continue
+
+        # --- Default: single-turn orchestrator flow ---
+        customer_id = lookup_customer(from_phone)
         session_id = f"wa-{uuid.uuid4().hex[:8]}"
         emitter = SSEEventEmitter(session_id=session_id, use_case="UC2", channel=Channel.WHATSAPP)
         orchestrator = OrchestratorAgent(emitter)
@@ -270,7 +324,6 @@ async def whatsapp_webhook(request: Request):
             session_id=session_id,
         )
 
-        # Reply on WhatsApp
         intent = result.get("intent", "unknown")
         summary = result.get("summary", message)
         reply = (
@@ -282,9 +335,81 @@ async def whatsapp_webhook(request: Request):
             f"You'll receive an update shortly.\n\n"
             f"Ref: {session_id}"
         )
+        _emit_chat_event(from_phone, reply, direction="outbound")
         await send_whatsapp_message(from_phone, reply)
 
     return {"status": "ok"}
+
+
+def _emit_chat_event(phone: str, message: str, direction: str = "inbound"):
+    """Push a chat message event to the SSE bus for dashboard WhatsApp panel."""
+    import time as _time
+    chat_event = {
+        "type": "chat",
+        "phone": phone,
+        "message": message,
+        "direction": direction,
+        "timestamp": _time.time(),
+    }
+    payload = json.dumps(chat_event, default=str)
+    for q in _event_subscribers:
+        try:
+            q.put_nowait(payload)
+        except asyncio.QueueFull:
+            pass
+
+
+async def _run_onboarding_agents(session, emitter, phone: str):
+    """Call the appropriate agents based on the conversation step for event emission."""
+    step = session.step
+    customer_id = f"NEW-{phone}"
+
+    if step == "aadhaar":
+        from backend.agents.identity_verify.agent import IdentityVerifyAgent
+        agent = IdentityVerifyAgent(emitter)
+        await agent.verify_aadhaar(session.aadhaar if session.aadhaar else "999999999999")
+
+    elif step == "otp":
+        from backend.agents.document_agent.agent import DocumentAgent
+        agent = DocumentAgent(emitter)
+        await agent.extract_aadhaar_data(b"mock-aadhaar-photo")
+
+    elif step == "pan":
+        from backend.agents.identity_verify.agent import IdentityVerifyAgent
+        from backend.agents.kyc_aml.agent import KycAmlAgent
+        id_agent = IdentityVerifyAgent(emitter)
+        kyc = KycAmlAgent(emitter)
+        await id_agent.verify_pan(session.pan if session.pan else "ABCDE1234F")
+        await kyc.run_aml_check({"name": session.name, "customer_id": customer_id})
+
+    elif step == "video_kyc":
+        from backend.agents.identity_verify.agent import IdentityVerifyAgent
+        agent = IdentityVerifyAgent(emitter)
+        await agent.verify_selfie(b"mock-selfie")
+
+
+async def _finalize_onboarding(session, emitter, phone: str):
+    """Create the customer record and emit account creation events."""
+    from backend.agents.account_provision.agent import AccountProvisionAgent
+    from backend.shared.mock_data.generator import create_demo_customer
+    from backend.channels.whatsapp.handler import register_phone
+
+    acct_agent = AccountProvisionAgent(emitter)
+    await acct_agent.create_account({"customer_id": f"NEW-{phone}", "name": session.name})
+    await acct_agent.send_welcome(f"NEW-{phone}", "whatsapp")
+
+    # Register as a demo customer
+    try:
+        customer, account = create_demo_customer(name=session.name, phone=phone)
+        register_phone(customer.phone, customer.customer_id)
+        emitter.emit(
+            agent_id="account-provision", agent_name="Account Provision Agent",
+            action="customer_registered",
+            output_data={"customer_id": customer.customer_id, "name": session.name},
+            customer_id=customer.customer_id,
+        )
+    except ValueError:
+        pass  # Phone already registered
 
 
 @app.post("/api/whatsapp/send")
