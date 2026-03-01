@@ -43,20 +43,26 @@ def get_channel_registration_id() -> str:
     return os.getenv("WHATSAPP_CHANNEL_ID", "")
 
 
-def lookup_customer(phone: str) -> str:
-    """Map a phone number to a customer ID."""
-    # Normalise: strip spaces, ensure +91 prefix
+def _normalize_phone(phone: str) -> str:
+    """Normalize phone to E.164 format (+91XXXXXXXXXX)."""
     phone = phone.strip().replace(" ", "")
     if not phone.startswith("+"):
-        phone = "+91" + phone.lstrip("0")
+        if phone.startswith("91") and len(phone) > 10:
+            phone = "+" + phone
+        else:
+            phone = "+91" + phone.lstrip("0")
+    return phone
+
+
+def lookup_customer(phone: str) -> str:
+    """Map a phone number to a customer ID."""
+    phone = _normalize_phone(phone)
     return _PHONE_TO_CUSTOMER.get(phone, f"UNKNOWN-{phone}")
 
 
 def register_phone(phone: str, customer_id: str) -> None:
     """Register a phone number → customer_id mapping (for demo customers)."""
-    phone = phone.strip().replace(" ", "")
-    if not phone.startswith("+"):
-        phone = "+91" + phone.lstrip("0")
+    phone = _normalize_phone(phone)
     _PHONE_TO_CUSTOMER[phone] = customer_id
 
 
@@ -78,9 +84,7 @@ async def send_whatsapp_message(to_phone: str, message: str) -> dict:
     try:
         client = _get_client()
         # Normalise phone number
-        to_phone = to_phone.strip().replace(" ", "")
-        if not to_phone.startswith("+"):
-            to_phone = "+91" + to_phone.lstrip("0")
+        to_phone = _normalize_phone(to_phone)
 
         content = TextNotificationContent(
             channel_registration_id=channel_id,

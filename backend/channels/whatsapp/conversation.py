@@ -159,7 +159,11 @@ def end_session(phone: str) -> None:
 def _normalize_phone(phone: str) -> str:
     phone = phone.strip().replace(" ", "")
     if not phone.startswith("+"):
-        phone = "+91" + phone.lstrip("0")
+        # Handle numbers already starting with country code 91
+        if phone.startswith("91") and len(phone) > 10:
+            phone = "+" + phone
+        else:
+            phone = "+91" + phone.lstrip("0")
     return phone
 
 
