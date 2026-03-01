@@ -176,10 +176,16 @@ def create_demo_customer(name: str, phone: str) -> tuple[Customer, Account]:
 
     Only name and phone are real; everything else is simulated.
     Returns (customer, account) tuple.
+    Raises ValueError if phone is already registered.
     """
     phone = phone.strip().replace(" ", "")
     if not phone.startswith("+"):
         phone = "+91" + phone.lstrip("0")
+
+    # Check for duplicate phone number
+    for c in get_all_customers():
+        if c.phone == phone:
+            raise ValueError(f"Phone {phone} is already registered to {c.name} ({c.customer_id})")
 
     # Generate a sequential customer ID
     seq = len(_dynamic_customers) + 4  # 1-3 are fixed personas

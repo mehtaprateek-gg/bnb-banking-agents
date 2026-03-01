@@ -18,7 +18,7 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from backend.shared.events.emitter import EventEmitter
@@ -198,7 +198,11 @@ async def add_customer(req: AddCustomerRequest):
     from backend.shared.mock_data.generator import create_demo_customer
     from backend.channels.whatsapp.handler import register_phone
 
-    customer, account = create_demo_customer(name=req.name, phone=req.phone)
+    try:
+        customer, account = create_demo_customer(name=req.name, phone=req.phone)
+    except ValueError as e:
+        return JSONResponse(status_code=409, content={"error": str(e)})
+
     # Update the WhatsApp phone → customer_id lookup map
     register_phone(customer.phone, customer.customer_id)
 
