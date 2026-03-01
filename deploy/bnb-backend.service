@@ -1,0 +1,23 @@
+[Unit]
+Description=BNB Banking Agents Backend
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/admin/bnb-banking-agents
+Environment=PYTHONPATH=/home/admin/bnb-banking-agents
+Environment=AZURE_OPENAI_ENDPOINT=https://bnb-openai.openai.azure.com/
+Environment=AZURE_OPENAI_DEPLOYMENT=gpt-4o
+Environment=DATAVERSE_URL=https://org8973c330.crm.dynamics.com
+Environment=AZURE_TENANT_ID=b2e62839-cc6c-4e1e-8c4a-bc35ebc9b3d9
+Environment=COSMOS_ENDPOINT=https://bnb-cosmos-db2026.documents.azure.com:443/
+Environment=COSMOS_DATABASE=bnb-db
+Environment=WHATSAPP_CHANNEL_ID=<your-whatsapp-channel-registration-id>
+Environment="ACS_CONNECTION_STRING=<your-acs-connection-string>"
+ExecStart=/home/admin/bnb-banking-agents/.venv/bin/python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
