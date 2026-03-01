@@ -240,6 +240,7 @@ def _handle_aadhaar(session: OnboardingSession, msg: str) -> tuple[str, bool]:
     session.otp = generate_otp()
     session.otp_attempts = 0
     session.step = "otp"
+    print(f"[ONBOARDING] Generated OTP={session.otp} for phone={session.phone}")
 
     masked = f"XXXX XXXX {result[-4:]}"
     phone_last4 = session.phone[-4:] if len(session.phone) >= 4 else "XXXX"

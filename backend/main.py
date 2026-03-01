@@ -306,7 +306,7 @@ async def whatsapp_webhook(request: Request):
             await _run_onboarding_agents(session, emitter, from_phone)
 
             reply, is_complete = handle_step(session, message)
-            print(f"[WA-WEBHOOK] Step reply (complete={is_complete}): {reply[:60]}...")
+            print(f"[WA-WEBHOOK] Step reply (complete={is_complete}, step={session.step}): {reply[:120]}...")
             _emit_chat_event(from_phone, reply, direction="outbound")
             result = await send_whatsapp_message(from_phone, reply)
             print(f"[WA-WEBHOOK] Send result: {result}")
