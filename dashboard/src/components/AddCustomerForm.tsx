@@ -90,7 +90,7 @@ const AddCustomerForm: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <input
             type="text"
-            placeholder="Full Name (e.g., Prateem Mehta)"
+            placeholder="Full Name (e.g., Prateek Mehta)"
             value={name}
             onChange={(e) => setName(e.target.value)}
             style={inputStyle}

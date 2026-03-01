@@ -219,7 +219,7 @@ def _handle_name(session: OnboardingSession, msg: str) -> tuple[str, bool]:
     if len(msg) < 2 or not any(c.isalpha() for c in msg):
         return (
             "Please enter a valid full name (at least 2 characters).\n"
-            "Example: Prateem Mehta",
+            "Example: Prateek Mehta",
             False,
         )
     session.name = msg.title()
