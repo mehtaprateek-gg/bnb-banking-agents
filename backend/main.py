@@ -261,12 +261,14 @@ async def whatsapp_webhook(request: Request):
 
         from_phone = parsed["from_phone"]
         message = parsed["message"]
+        print(f"[WA-WEBHOOK] Inbound from {from_phone}: {message[:50]}")
 
         # --- Emit inbound chat event for dashboard ---
         _emit_chat_event(from_phone, message, direction="inbound")
 
         # --- Multi-turn onboarding flow ---
         if is_onboarding_trigger(message) and not has_active_session(from_phone):
+            print(f"[WA-WEBHOOK] Onboarding trigger detected for {from_phone}")
             session = start_session(from_phone)
             session_id = f"wa-onboard-{uuid.uuid4().hex[:8]}"
             emitter = SSEEventEmitter(session_id=session_id, use_case="UC1", channel=Channel.WHATSAPP)
@@ -287,10 +289,12 @@ async def whatsapp_webhook(request: Request):
                 "Please share your *full name* as per Aadhaar."
             )
             _emit_chat_event(from_phone, reply, direction="outbound")
-            await send_whatsapp_message(from_phone, reply)
+            result = await send_whatsapp_message(from_phone, reply)
+            print(f"[WA-WEBHOOK] Send result: {result}")
             continue
 
         if has_active_session(from_phone):
+            print(f"[WA-WEBHOOK] Active session for {from_phone}, step={get_session(from_phone).step if get_session(from_phone) else 'None'}")
             session = get_session(from_phone)
             if not session:
                 continue
@@ -302,8 +306,10 @@ async def whatsapp_webhook(request: Request):
             await _run_onboarding_agents(session, emitter, from_phone)
 
             reply, is_complete = handle_step(session, message)
+            print(f"[WA-WEBHOOK] Step reply (complete={is_complete}): {reply[:60]}...")
             _emit_chat_event(from_phone, reply, direction="outbound")
-            await send_whatsapp_message(from_phone, reply)
+            result = await send_whatsapp_message(from_phone, reply)
+            print(f"[WA-WEBHOOK] Send result: {result}")
 
             if is_complete and session.step == "complete":
                 # Auto-register customer
