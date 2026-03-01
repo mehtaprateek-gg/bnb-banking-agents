@@ -313,8 +313,10 @@ async def whatsapp_webhook(request: Request):
 
             if is_complete and session.step == "complete":
                 # Auto-register customer
+                print(f"[WA-WEBHOOK] Onboarding complete! Finalizing for {from_phone}")
                 await _finalize_onboarding(session, emitter, from_phone)
                 end_session(from_phone)
+                print(f"[WA-WEBHOOK] Session ended for {from_phone}")
             continue
 
         # --- Default: single-turn orchestrator flow ---
@@ -400,22 +402,30 @@ async def _finalize_onboarding(session, emitter, phone: str):
     from backend.shared.mock_data.generator import create_demo_customer
     from backend.channels.whatsapp.handler import register_phone
 
-    acct_agent = AccountProvisionAgent(emitter)
-    await acct_agent.create_account({"customer_id": f"NEW-{phone}", "name": session.name})
-    await acct_agent.send_welcome(f"NEW-{phone}", "whatsapp")
+    print(f"[WA-WEBHOOK] Finalizing onboarding for {phone}, name={session.name}")
+
+    try:
+        acct_agent = AccountProvisionAgent(emitter)
+        await acct_agent.create_account({"customer_id": f"NEW-{phone}", "name": session.name})
+        await acct_agent.send_welcome(f"NEW-{phone}", "whatsapp")
+    except Exception as e:
+        print(f"[WA-WEBHOOK] Agent error (non-fatal): {e}")
 
     # Register as a demo customer
     try:
         customer, account = create_demo_customer(name=session.name, phone=phone)
         register_phone(customer.phone, customer.customer_id)
+        print(f"[WA-WEBHOOK] Customer registered: {customer.customer_id} phone={customer.phone}")
         emitter.emit(
             agent_id="account-provision", agent_name="Account Provision Agent",
             action="customer_registered",
             output_data={"customer_id": customer.customer_id, "name": session.name},
             customer_id=customer.customer_id,
         )
-    except ValueError:
-        pass  # Phone already registered
+    except ValueError as e:
+        print(f"[WA-WEBHOOK] Customer already exists: {e}")
+    except Exception as e:
+        print(f"[WA-WEBHOOK] Customer registration error: {e}")
 
 
 @app.post("/api/whatsapp/send")
