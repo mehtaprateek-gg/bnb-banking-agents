@@ -58,7 +58,8 @@ const CustomerList: React.FC<CustomerListProps> = ({ onRefreshRequest }) => {
     }
   };
 
-  const isFixedPersona = (id: string) => id.startsWith('CUST-00');
+  const FIXED_IDS = new Set(['CUST-001-ANANYA', 'CUST-002-PRIYA', 'CUST-003-RAJESH']);
+  const isFixedPersona = (id: string) => FIXED_IDS.has(id);
 
   useEffect(() => { fetchCustomers(); }, [fetchCustomers, onRefreshRequest]);
 

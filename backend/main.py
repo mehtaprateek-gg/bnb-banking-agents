@@ -431,7 +431,10 @@ async def _finalize_onboarding(session, emitter, phone: str):
 
     # Register as a demo customer
     try:
-        customer, account = create_demo_customer(name=session.name, phone=phone)
+        customer, account = create_demo_customer(
+            name=session.name, phone=phone,
+            aadhaar=session.aadhaar or "", pan=session.pan or "",
+        )
         register_phone(customer.phone, customer.customer_id)
         print(f"[WA-WEBHOOK] Customer registered: {customer.customer_id} phone={customer.phone}")
         emitter.emit(

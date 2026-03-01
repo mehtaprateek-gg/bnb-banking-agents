@@ -171,10 +171,11 @@ def generate_transactions(customer_id: str, days: int = 30, count: int = 25) -> 
     return transactions
 
 
-def create_demo_customer(name: str, phone: str) -> tuple[Customer, Account]:
+def create_demo_customer(name: str, phone: str, aadhaar: str = "", pan: str = "") -> tuple[Customer, Account]:
     """Create a new demo customer with auto-generated mock data.
 
     Only name and phone are real; everything else is simulated.
+    If aadhaar/pan are provided (from WhatsApp onboarding), they are used for masking.
     Returns (customer, account) tuple.
     Raises ValueError if phone is already registered.
     """
@@ -200,13 +201,24 @@ def create_demo_customer(name: str, phone: str) -> tuple[Customer, Account]:
     last_name = name.split()[-1] if len(name.split()) > 1 else "User"
     email = f"{first_name.lower()}.{last_name.lower()}@demo.com"
 
+    # Use provided Aadhaar/PAN (from onboarding) or generate random masked values
+    if aadhaar and len(aadhaar) == 12:
+        aadhaar_display = f"XXXX-XXXX-{aadhaar[-4:]}"
+    else:
+        aadhaar_display = generate_aadhaar_masked()
+
+    if pan and len(pan) >= 5:
+        pan_display = f"{pan[:2]}XXX{pan[-2:]}"
+    else:
+        pan_display = generate_pan_masked()
+
     customer = Customer(
         customer_id=customer_id,
         name=name,
         phone=phone,
         email=email,
-        aadhaar_masked=generate_aadhaar_masked(),
-        pan_masked=generate_pan_masked(),
+        aadhaar_masked=aadhaar_display,
+        pan_masked=pan_display,
         account_number=generate_account_number(),
         account_type="savings",
         segment="retail",
