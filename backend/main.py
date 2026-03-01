@@ -219,7 +219,8 @@ async def delete_customer(customer_id: str):
     from backend.shared.mock_data.generator import delete_dynamic_customer
     from backend.channels.whatsapp.handler import unregister_phone
 
-    if customer_id.startswith("CUST-00"):
+    FIXED_IDS = {"CUST-001-ANANYA", "CUST-002-PRIYA", "CUST-003-RAJESH"}
+    if customer_id in FIXED_IDS:
         return JSONResponse(status_code=400, content={"error": "Cannot delete fixed demo personas"})
 
     deleted = delete_dynamic_customer(customer_id)
