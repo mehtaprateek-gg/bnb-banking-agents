@@ -4,6 +4,7 @@ import AgentGraph from './components/AgentGraph';
 import EventTimeline from './components/EventTimeline';
 import AgentInspector from './components/AgentInspector';
 import DemoControls from './components/DemoControls';
+import CustomerList from './components/CustomerList';
 import { useEventStream } from './hooks/useEventStream';
 import { AgentEvent } from './types';
 
@@ -32,13 +33,17 @@ function App() {
 
       {/* Main content */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        {/* Agent Graph - 60% */}
-        <div style={{ flex: 6, minWidth: 0 }}>
+        {/* Agent Graph - 50% */}
+        <div style={{ flex: 5, minWidth: 0 }}>
           <AgentGraph events={events} onSelectAgent={handleSelectAgent} />
         </div>
-        {/* Event Timeline - 40% */}
-        <div style={{ flex: 4, minWidth: 300 }}>
+        {/* Event Timeline - 30% */}
+        <div style={{ flex: 3, minWidth: 250 }}>
           <EventTimeline events={events} onSelectEvent={setSelectedEvent} />
+        </div>
+        {/* Customer List - 20% */}
+        <div style={{ flex: 2, minWidth: 220 }}>
+          <CustomerList />
         </div>
       </div>
 
