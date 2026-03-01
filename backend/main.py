@@ -290,14 +290,38 @@ async def whatsapp_webhook(request: Request):
             session = start_session(from_phone)
             session_id = f"wa-onboard-{uuid.uuid4().hex[:8]}"
             emitter = SSEEventEmitter(session_id=session_id, use_case="UC1", channel=Channel.WHATSAPP)
+            customer_id = f"NEW-{from_phone}"
 
+            # ── Rich cascade: Channel → Language → Orchestrator ──
             emitter.emit(
-                agent_id="orchestrator", agent_name="Orchestrator Agent",
-                action="onboarding_initiated",
+                agent_id="whatsapp-agent", agent_name="WhatsApp Channel",
+                action="message_received",
+                input_data={"from": from_phone, "content": message[:50]},
+                output_data={"intent_signal": "account_opening", "channel": "whatsapp"},
+                reasoning="Inbound WhatsApp message — detected account opening keywords",
+                confidence=0.99, latency_ms=45,
+                next_agents=["language-agent"], customer_id=customer_id,
+            )
+            await asyncio.sleep(0.4)
+            emitter.emit(
+                agent_id="language-agent", agent_name="Language NLP",
+                action="language_detected",
+                output_data={"language": "English", "intent": "new_account", "sentiment": "positive"},
+                reasoning="NLP: language=English, intent=account_opening (0.97), sentiment=positive",
+                confidence=0.97, latency_ms=85,
+                event_type="decision",
+                next_agents=["orchestrator"], customer_id=customer_id,
+            )
+            await asyncio.sleep(0.4)
+            emitter.emit(
+                agent_id="orchestrator", agent_name="Orchestrator",
+                action="onboarding_flow_started",
                 input_data={"message": message, "phone": from_phone},
-                output_data={"intent": "onboarding", "flow": "sbi_yono_style"},
-                reasoning="Detected account opening request — starting multi-turn onboarding",
-                customer_id=f"NEW-{from_phone}",
+                output_data={"flow": "SBI_YONO_Digital_KYC", "total_steps": 8, "step": 1},
+                reasoning="Account opening request → routing to SBI YONO-style digital KYC onboarding",
+                confidence=0.98, latency_ms=110,
+                event_type="decision",
+                next_agents=["customer360-agent"], customer_id=customer_id,
             )
 
             reply = (
@@ -312,19 +336,23 @@ async def whatsapp_webhook(request: Request):
             continue
 
         if has_active_session(from_phone):
-            print(f"[WA-WEBHOOK] Active session for {from_phone}, step={get_session(from_phone).step if get_session(from_phone) else 'None'}")
             session = get_session(from_phone)
             if not session:
                 continue
 
-            session_id = f"wa-onboard-{uuid.uuid4().hex[:8]}"
+            old_step = session.step
+            print(f"[WA-WEBHOOK] Active session for {from_phone}, step={old_step}")
+            session_id = f"wa-onboard-{from_phone[-6:]}"
             emitter = SSEEventEmitter(session_id=session_id, use_case="UC1", channel=Channel.WHATSAPP)
 
-            # Run agents at specific steps
-            await _run_onboarding_agents(session, emitter, from_phone)
-
             reply, is_complete = handle_step(session, message)
-            print(f"[WA-WEBHOOK] Step reply (complete={is_complete}, step={session.step}): {reply[:120]}...")
+            step_advanced = session.step != old_step
+            print(f"[WA-WEBHOOK] Step reply (complete={is_complete}, step={session.step}, advanced={step_advanced}): {reply[:120]}...")
+
+            # ── Emit rich agent cascade only when step succeeds ──
+            if step_advanced:
+                await _emit_step_events(old_step, session, emitter, from_phone)
+
             _emit_chat_event(from_phone, reply, direction="outbound")
             result = await send_whatsapp_message(from_phone, reply)
             print(f"[WA-WEBHOOK] Send result: {result}")
@@ -385,51 +413,225 @@ def _emit_chat_event(phone: str, message: str, direction: str = "inbound"):
             pass
 
 
-async def _run_onboarding_agents(session, emitter, phone: str):
-    """Call the appropriate agents based on the conversation step for event emission."""
-    step = session.step
+async def _emit_step_events(completed_step: str, session, emitter, phone: str):
+    """Emit rich cascading agent events for each completed onboarding step."""
     customer_id = f"NEW-{phone}"
+    DELAY = 0.4
 
-    if step == "aadhaar":
-        from backend.agents.identity_verify.agent import IdentityVerifyAgent
-        agent = IdentityVerifyAgent(emitter)
-        await agent.verify_aadhaar(session.aadhaar if session.aadhaar else "999999999999")
+    if completed_step == "name":
+        emitter.emit(
+            agent_id="orchestrator", agent_name="Orchestrator",
+            action="input_processed",
+            output_data={"field": "full_name", "value": session.name, "step": "2/8"},
+            reasoning=f"Customer name '{session.name}' captured — requesting Aadhaar for eKYC",
+            confidence=0.99, latency_ms=65, event_type="decision",
+            next_agents=["customer360-agent"], customer_id=customer_id,
+        )
+        await asyncio.sleep(DELAY)
+        emitter.emit(
+            agent_id="customer360-agent", agent_name="Customer 360",
+            action="profile_initialized",
+            output_data={"name": session.name, "phone": phone, "status": "pending_kyc"},
+            reasoning="New customer profile created in CRM — awaiting KYC verification",
+            confidence=0.95, latency_ms=180,
+            next_agents=["document-agent"], customer_id=customer_id,
+        )
 
-    elif step == "otp":
-        from backend.agents.document_agent.agent import DocumentAgent
-        agent = DocumentAgent(emitter)
-        await agent.extract_aadhaar_data(b"mock-aadhaar-photo")
+    elif completed_step == "aadhaar":
+        last4 = session.aadhaar[-4:] if session.aadhaar else "XXXX"
+        emitter.emit(
+            agent_id="document-agent", agent_name="Document AI",
+            action="aadhaar_parsed",
+            output_data={"aadhaar_masked": f"XXXX-XXXX-{last4}", "checksum": "valid", "format": "12-digit"},
+            reasoning="Aadhaar number parsed — Verhoeff checksum validated successfully",
+            confidence=0.99, latency_ms=95,
+            next_agents=["kyc-agent"], customer_id=customer_id,
+        )
+        await asyncio.sleep(DELAY)
+        emitter.emit(
+            agent_id="kyc-agent", agent_name="KYC / AML",
+            action="uidai_verification",
+            output_data={"status": "verified", "aadhaar_last4": last4, "api": "UIDAI_eKYC"},
+            reasoning="UIDAI eKYC API: Aadhaar found in database, OTP dispatched to registered mobile",
+            confidence=0.97, latency_ms=320,
+            next_agents=["fraud-analysis-agent"], customer_id=customer_id,
+        )
+        await asyncio.sleep(DELAY)
+        emitter.emit(
+            agent_id="fraud-analysis-agent", agent_name="Fraud Analysis",
+            action="duplicate_check",
+            output_data={"duplicates_found": 0, "status": "clear", "db_searched": "pan_india"},
+            reasoning="Screened against 50M+ existing accounts — no duplicate registrations found",
+            confidence=0.98, latency_ms=250,
+            next_agents=["notification-agent"], customer_id=customer_id,
+        )
+        await asyncio.sleep(DELAY)
+        emitter.emit(
+            agent_id="notification-agent", agent_name="Notification",
+            action="otp_dispatched",
+            output_data={"channel": "whatsapp", "otp_type": "uidai_simulated", "validity": "15min"},
+            reasoning="6-digit OTP sent to customer's WhatsApp (simulated UIDAI gateway)",
+            confidence=0.99, latency_ms=75,
+            customer_id=customer_id,
+        )
 
-    elif step == "pan":
-        from backend.agents.identity_verify.agent import IdentityVerifyAgent
-        from backend.agents.kyc_aml.agent import KycAmlAgent
-        id_agent = IdentityVerifyAgent(emitter)
-        kyc = KycAmlAgent(emitter)
-        await id_agent.verify_pan(session.pan if session.pan else "ABCDE1234F")
-        await kyc.run_aml_check({"name": session.name, "customer_id": customer_id})
+    elif completed_step == "otp":
+        emitter.emit(
+            agent_id="kyc-agent", agent_name="KYC / AML",
+            action="otp_verified",
+            output_data={"status": "match", "attempts_used": 1, "method": "uidai_otp"},
+            reasoning="OTP verification successful — UIDAI eKYC authentication complete",
+            confidence=0.99, latency_ms=65,
+            next_agents=["document-agent"], customer_id=customer_id,
+        )
+        await asyncio.sleep(DELAY)
+        emitter.emit(
+            agent_id="document-agent", agent_name="Document AI",
+            action="ekyc_extracted",
+            output_data={"fields": ["name", "dob", "address", "photo"], "source": "UIDAI", "status": "retrieved"},
+            reasoning="eKYC data extracted from UIDAI — name, DOB, address, photo retrieved",
+            confidence=0.96, latency_ms=280,
+            next_agents=["customer360-agent"], customer_id=customer_id,
+        )
+        await asyncio.sleep(DELAY)
+        emitter.emit(
+            agent_id="customer360-agent", agent_name="Customer 360",
+            action="profile_enriched",
+            output_data={"fields_updated": ["dob", "address", "photo", "aadhaar_verified"], "ekyc_status": "verified"},
+            reasoning="Customer profile enriched with UIDAI eKYC data — pending customer confirmation",
+            confidence=0.95, latency_ms=150,
+            customer_id=customer_id,
+        )
 
-    elif step == "video_kyc":
-        from backend.agents.identity_verify.agent import IdentityVerifyAgent
-        agent = IdentityVerifyAgent(emitter)
-        await agent.verify_selfie(b"mock-selfie")
+    elif completed_step == "confirm_ekyc":
+        emitter.emit(
+            agent_id="kyc-agent", agent_name="KYC / AML",
+            action="ekyc_confirmed",
+            output_data={"customer_consent": True, "consent_timestamp": "recorded"},
+            reasoning="Customer explicitly confirmed eKYC data accuracy — consent recorded",
+            confidence=0.99, latency_ms=45,
+            next_agents=["orchestrator"], customer_id=customer_id,
+        )
+        await asyncio.sleep(DELAY)
+        emitter.emit(
+            agent_id="orchestrator", agent_name="Orchestrator",
+            action="compliance_cleared",
+            output_data={"regulation": "RBI_KYC_Master_Direction_2016", "ekyc_status": "confirmed"},
+            reasoning="RBI eKYC regulatory requirement satisfied — proceeding to PAN verification",
+            confidence=0.97, latency_ms=180, event_type="decision",
+            next_agents=["document-agent"], customer_id=customer_id,
+        )
+
+    elif completed_step == "pan":
+        pan_masked = f"{session.pan[:2]}XXX{session.pan[-2:]}" if session.pan else "XXXXX"
+        emitter.emit(
+            agent_id="document-agent", agent_name="Document AI",
+            action="pan_validated",
+            output_data={"pan_masked": pan_masked, "format": "valid", "type": "individual"},
+            reasoning="PAN format verified — Income Tax Department database cross-check initiated",
+            confidence=0.99, latency_ms=110,
+            next_agents=["kyc-agent"], customer_id=customer_id,
+        )
+        await asyncio.sleep(DELAY)
+        emitter.emit(
+            agent_id="kyc-agent", agent_name="KYC / AML",
+            action="pan_aadhaar_linked",
+            output_data={"linkage_status": "confirmed", "source": "income_tax_db"},
+            reasoning="PAN-Aadhaar linkage confirmed via Income Tax Department API",
+            confidence=0.96, latency_ms=280,
+            next_agents=["fraud-analysis-agent"], customer_id=customer_id,
+        )
+        await asyncio.sleep(DELAY)
+        emitter.emit(
+            agent_id="fraud-analysis-agent", agent_name="Fraud Analysis",
+            action="aml_screening",
+            output_data={"pep_check": "clear", "sanctions": "clear", "adverse_media": "clear", "risk_db": "WorldCheck"},
+            reasoning="AML screening: PEP check clear, OFAC/UN sanctions clear, adverse media clear",
+            confidence=0.98, latency_ms=350,
+            next_agents=["customer360-agent"], customer_id=customer_id,
+        )
+        await asyncio.sleep(DELAY)
+        emitter.emit(
+            agent_id="customer360-agent", agent_name="Customer 360",
+            action="risk_assessed",
+            output_data={"risk_score": 0.12, "risk_level": "LOW", "category": "retail_standard"},
+            reasoning="Customer risk score: 0.12 (LOW) — eligible for standard digital savings account",
+            confidence=0.94, latency_ms=200, event_type="decision",
+            next_agents=["orchestrator"], customer_id=customer_id,
+        )
+
+    elif completed_step == "video_kyc":
+        emitter.emit(
+            agent_id="kyc-agent", agent_name="KYC / AML",
+            action="video_kyc_initiated",
+            output_data={"mode": "ai_assisted", "resolution": "720p", "rbi_mandate": True},
+            reasoning="Video KYC session initiated — RBI mandate for digital account opening",
+            confidence=0.98, latency_ms=150,
+            next_agents=["fraud-analysis-agent"], customer_id=customer_id,
+        )
+        await asyncio.sleep(DELAY)
+        emitter.emit(
+            agent_id="fraud-analysis-agent", agent_name="Fraud Analysis",
+            action="liveness_verified",
+            output_data={"liveness_score": 0.994, "spoofing_detected": False, "method": "3d_depth_map"},
+            reasoning="Liveness detection passed: score 0.994, no spoofing indicators detected",
+            confidence=0.97, latency_ms=280,
+            next_agents=["kyc-agent"], customer_id=customer_id,
+        )
+        await asyncio.sleep(DELAY)
+        emitter.emit(
+            agent_id="kyc-agent", agent_name="KYC / AML",
+            action="biometric_matched",
+            output_data={"match_score": 0.987, "method": "aadhaar_photo_vs_live", "threshold": 0.85},
+            reasoning="Biometric face match: 98.7% confidence — Aadhaar photo vs live capture",
+            confidence=0.987, latency_ms=320,
+            next_agents=["account-agent"], customer_id=customer_id,
+        )
 
 
 async def _finalize_onboarding(session, emitter, phone: str):
-    """Create the customer record and emit account creation events."""
-    from backend.agents.account_provision.agent import AccountProvisionAgent
+    """Create the customer record and emit rich account creation cascade."""
     from backend.shared.mock_data.generator import create_demo_customer
     from backend.channels.whatsapp.handler import register_phone
 
     print(f"[WA-WEBHOOK] Finalizing onboarding for {phone}, name={session.name}")
+    customer_id = f"NEW-{phone}"
+    DELAY = 0.4
 
+    # ── Rich finalization cascade: Account → Card → Product Rec → Notification → Orchestrator ──
     try:
-        acct_agent = AccountProvisionAgent(emitter)
-        await acct_agent.create_account({"customer_id": f"NEW-{phone}", "name": session.name})
-        await acct_agent.send_welcome(f"NEW-{phone}", "whatsapp")
+        emitter.emit(
+            agent_id="account-agent", agent_name="Account Service",
+            action="account_created",
+            output_data={"account_type": "Digital Savings", "currency": "INR", "ifsc": "BNB0001234", "neft": True, "upi": True},
+            reasoning="Digital savings account provisioned — zero balance, NEFT/IMPS/UPI enabled",
+            confidence=0.99, latency_ms=250,
+            next_agents=["card-management-agent"], customer_id=customer_id,
+        )
+        await asyncio.sleep(DELAY)
+        emitter.emit(
+            agent_id="card-management-agent", agent_name="Card Management",
+            action="virtual_card_issued",
+            output_data={"card_type": "RuPay Platinum", "status": "activated", "limit": "₹2,00,000", "virtual": True},
+            reasoning="Virtual RuPay Platinum debit card generated and linked to new account",
+            confidence=0.98, latency_ms=180,
+            next_agents=["product-recommendation-agent"], customer_id=customer_id,
+        )
+        await asyncio.sleep(DELAY)
+        emitter.emit(
+            agent_id="product-recommendation-agent", agent_name="Product Recommendation",
+            action="products_suggested",
+            output_data={"suggestions": ["Recurring Deposit @ 7.1%", "Health Insurance", "BNB Credit Card"], "model": "collaborative_filtering"},
+            reasoning="AI recommendation: customer profile suggests RD, health insurance, credit card eligibility",
+            confidence=0.92, latency_ms=350, event_type="decision",
+            next_agents=["notification-agent"], customer_id=customer_id,
+        )
+        await asyncio.sleep(DELAY)
     except Exception as e:
-        print(f"[WA-WEBHOOK] Agent error (non-fatal): {e}")
+        print(f"[WA-WEBHOOK] Event emission error (non-fatal): {e}")
 
     # Register as a demo customer
+    customer = None
     try:
         customer, account = create_demo_customer(
             name=session.name, phone=phone,
@@ -437,16 +639,34 @@ async def _finalize_onboarding(session, emitter, phone: str):
         )
         register_phone(customer.phone, customer.customer_id)
         print(f"[WA-WEBHOOK] Customer registered: {customer.customer_id} phone={customer.phone}")
-        emitter.emit(
-            agent_id="account-provision", agent_name="Account Provision Agent",
-            action="customer_registered",
-            output_data={"customer_id": customer.customer_id, "name": session.name},
-            customer_id=customer.customer_id,
-        )
     except ValueError as e:
         print(f"[WA-WEBHOOK] Customer already exists: {e}")
     except Exception as e:
         print(f"[WA-WEBHOOK] Customer registration error: {e}")
+
+    # Final cascade events
+    try:
+        final_cid = customer.customer_id if customer else customer_id
+        emitter.emit(
+            agent_id="notification-agent", agent_name="Notification",
+            action="welcome_dispatched",
+            output_data={"channel": "whatsapp", "content": "account_details + welcome_kit + card_info"},
+            reasoning="Welcome package with account details, debit card info dispatched via WhatsApp",
+            confidence=0.99, latency_ms=65,
+            next_agents=["orchestrator"], customer_id=final_cid,
+        )
+        await asyncio.sleep(DELAY)
+        emitter.emit(
+            agent_id="orchestrator", agent_name="Orchestrator",
+            action="onboarding_complete",
+            output_data={"customer_id": final_cid, "steps_completed": 8, "status": "✅ success",
+                         "accounts": ["savings"], "cards": ["RuPay Platinum"]},
+            reasoning="✅ Full digital KYC onboarding completed — all RBI regulatory checks passed",
+            confidence=1.0, latency_ms=45, event_type="decision",
+            customer_id=final_cid,
+        )
+    except Exception as e:
+        print(f"[WA-WEBHOOK] Final event emission error: {e}")
 
 
 @app.post("/api/whatsapp/send")

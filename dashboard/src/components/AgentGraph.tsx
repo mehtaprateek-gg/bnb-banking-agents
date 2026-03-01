@@ -40,8 +40,8 @@ function CustomNode({ data }: NodeProps) {
       minWidth: 130,
       textAlign: 'center',
       boxShadow: isActive
-        ? `0 0 20px ${colors.glow}40, 0 0 40px ${colors.glow}20`
-        : isTouched ? `0 0 8px ${colors.border}30` : 'none',
+        ? `0 0 25px ${colors.glow}50, 0 0 50px ${colors.glow}30, 0 0 80px ${colors.glow}15`
+        : isTouched ? `0 0 12px ${colors.border}40` : 'none',
       transition: 'all 0.4s ease',
       animation: isActive ? 'pulse 2s ease-in-out infinite' : 'none',
     }}>
@@ -71,6 +71,14 @@ function CustomNode({ data }: NodeProps) {
           textTransform: 'uppercase', letterSpacing: 1.5, fontWeight: 700,
         }}>
           ● ACTIVE
+        </div>
+      )}
+      {isActive && data.action && (
+        <div style={{
+          fontSize: 8, marginTop: 2, color: '#94a3b8',
+          maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {data.action}
         </div>
       )}
       <Handle type="source" position={Position.Bottom} style={{ background: isActive ? colors.glow : '#555', width: 6, height: 6 }} />
@@ -170,6 +178,8 @@ const AgentGraph: React.FC<Props> = ({ events, onSelectAgent }) => {
     return defaultNodes.map((node) => {
       if (node.type !== 'custom') return node;
       const metrics = agentMetrics[node.id];
+      // Find latest action for this agent
+      const lastAgentEvent = [...events].reverse().find(e => e.agentId === node.id);
       return {
         ...node,
         data: {
@@ -178,30 +188,64 @@ const AgentGraph: React.FC<Props> = ({ events, onSelectAgent }) => {
           isTouched: activeAgentIds.has(node.id),
           confidence: metrics?.confidence || 0,
           latency: Math.round(metrics?.latency || 0),
+          action: lastAgentEvent?.action?.replace(/_/g, ' ') || '',
         },
       };
     });
-  }, [activeAgentIds, currentAgentId, agentMetrics]);
+  }, [activeAgentIds, currentAgentId, agentMetrics, events]);
 
   const edges = useMemo(() => {
-    const activeEdgeSet = new Set<string>();
-    for (let i = 1; i < events.length; i++) {
-      activeEdgeSet.add(`${events[i - 1].agentId}->${events[i].agentId}`);
-    }
+    // Build set of recently active agent IDs (last 5 events) for flow visualization
+    const recentIds = new Set<string>();
+    events.slice(-5).forEach((e) => recentIds.add(e.agentId));
+
     return defaultEdges.map((edge) => {
-      const key = `${edge.source}->${edge.target}`;
-      const isActive = activeEdgeSet.has(key);
+      const sourceIsActive = edge.source === currentAgentId;
+      const targetIsActive = edge.target === currentAgentId;
+      const bothTouched = activeAgentIds.has(edge.source) && activeAgentIds.has(edge.target);
+      const recentFlow = recentIds.has(edge.source) && recentIds.has(edge.target);
+
+      // Edge TO/FROM currently active agent: bright green, animated, glowing
+      if (sourceIsActive || targetIsActive) {
+        return {
+          ...edge,
+          animated: true,
+          style: {
+            stroke: '#4ade80',
+            strokeWidth: 3,
+            filter: 'drop-shadow(0 0 8px #4ade8090)',
+          },
+        };
+      }
+      // Edge between recently active agents: blue, animated
+      if (recentFlow) {
+        return {
+          ...edge,
+          animated: true,
+          style: {
+            stroke: '#60a5fa',
+            strokeWidth: 2,
+            filter: 'drop-shadow(0 0 4px #60a5fa60)',
+          },
+        };
+      }
+      // Edge between any previously touched agents: subtle glow
+      if (bothTouched) {
+        return {
+          ...edge,
+          style: {
+            stroke: '#475569',
+            strokeWidth: 1.5,
+          },
+        };
+      }
+      // Inactive edge
       return {
         ...edge,
-        animated: isActive,
-        style: {
-          stroke: isActive ? '#4ade80' : '#334',
-          strokeWidth: isActive ? 2.5 : 1,
-          filter: isActive ? 'drop-shadow(0 0 4px #4ade8080)' : 'none',
-        },
+        style: { stroke: '#1e293b', strokeWidth: 1 },
       };
     });
-  }, [events]);
+  }, [events, currentAgentId, activeAgentIds]);
 
   const onNodeClick = useCallback((_: any, node: Node) => {
     if (node.type === 'custom') onSelectAgent(node.id);
@@ -211,8 +255,13 @@ const AgentGraph: React.FC<Props> = ({ events, onSelectAgent }) => {
     <div style={{ width: '100%', height: '100%', background: '#0f0f1a' }}>
       <style>{`
         @keyframes pulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.03); }
+          0%, 100% { transform: scale(1); filter: brightness(1); }
+          50% { transform: scale(1.06); filter: brightness(1.3); }
+        }
+        @keyframes glowRing {
+          0% { box-shadow: 0 0 5px currentColor, 0 0 10px currentColor; }
+          50% { box-shadow: 0 0 20px currentColor, 0 0 40px currentColor, 0 0 60px currentColor; }
+          100% { box-shadow: 0 0 5px currentColor, 0 0 10px currentColor; }
         }
       `}</style>
       <ReactFlow

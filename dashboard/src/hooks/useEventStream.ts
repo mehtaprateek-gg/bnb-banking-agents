@@ -24,7 +24,7 @@ const API_BASE = process.env.REACT_APP_API_URL || '';
 
 export function useEventStream(): UseEventStreamReturn {
   const [events, setEvents] = useState<AgentEvent[]>([]);
-  const [mode, setMode] = useState<DemoMode>('replay');
+  const [mode, setMode] = useState<DemoMode>('live');
   const [scenario, setScenario] = useState<string>('UC2');
   const [speed, setSpeed] = useState<number>(1);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -51,6 +51,8 @@ export function useEventStream(): UseEventStreamReturn {
       sse.onmessage = (evt) => {
         try {
           const raw = JSON.parse(evt.data);
+          if (raw.type === 'chat') return; // Skip chat events (handled by WhatsAppChat)
+          if (!raw.agent_id) return; // Skip non-agent events
           const mapped: AgentEvent = {
             eventId: raw.event_id,
             timestamp: raw.timestamp,
