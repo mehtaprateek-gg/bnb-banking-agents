@@ -29,7 +29,7 @@ const CustomerList: React.FC<CustomerListProps> = ({ onRefreshRequest }) => {
     try {
       const resp = await fetch(`${API_BASE}/api/cosmos/customers`);
       const data = await resp.json();
-      setCustomers(data.customers || []);
+      setCustomers(Array.isArray(data) ? data : data.customers || []);
     } catch (err: any) {
       setError('Failed to load customers');
     } finally {
